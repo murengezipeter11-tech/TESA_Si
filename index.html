@@ -226,6 +226,49 @@ h1,h2,.brand,.welcome h1{font-family:var(--serif);font-weight:500}.assistant .bu
 .page input[type=password],.page input[type=text],#qEng input{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--text);font-size:14px}
 #qEng{text-align:left}#qEng .card{background:var(--panel2)}
 .stp{display:flex;gap:6px;justify-content:center;margin:0 0 14px}.stp i{width:26px;height:4px;border-radius:3px;background:var(--line)}.stp i.on{background:var(--grad)}
+
+/* ===== LOGIN / SIGN-UP ANIMATION (aurora + constellation) ===== */
+.auth-bg{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:0}
+.auth-bg canvas{position:absolute;inset:0;width:100%;height:100%}
+.blob{position:absolute;border-radius:50%;filter:blur(75px);opacity:.42;will-change:transform}
+.blob.b1{width:380px;height:380px;left:-110px;top:-90px;background:#246bff;animation:drift1 15s ease-in-out infinite alternate}
+.blob.b2{width:330px;height:330px;right:-120px;top:34%;background:#a855f7;animation:drift2 19s ease-in-out infinite alternate}
+.blob.b3{width:320px;height:320px;left:18%;bottom:-130px;background:#ff7a2f;opacity:.24;animation:drift3 17s ease-in-out infinite alternate}
+.light .blob{opacity:.26}.light .blob.b3{opacity:.16}
+@keyframes drift1{to{transform:translate(160px,120px) scale(1.25)}}
+@keyframes drift2{to{transform:translate(-150px,-110px) scale(1.2)}}
+@keyframes drift3{to{transform:translate(140px,-90px) scale(1.3)}}
+.auth-box{position:relative;z-index:1}
+.auth-box>*{animation:authIn .7s cubic-bezier(.2,.8,.2,1) both}
+.auth-box>*:nth-child(1){animation-delay:60ms}.auth-box>*:nth-child(2){animation-delay:120ms}.auth-box>*:nth-child(3){animation-delay:180ms}.auth-box>*:nth-child(4){animation-delay:240ms}.auth-box>*:nth-child(5){animation-delay:300ms}.auth-box>*:nth-child(6){animation-delay:360ms}.auth-box>*:nth-child(7){animation-delay:420ms}.auth-box>*:nth-child(8){animation-delay:480ms}.auth-box>*:nth-child(9){animation-delay:540ms}.auth-box>*:nth-child(10){animation-delay:600ms}.auth-box>*:nth-child(11){animation-delay:660ms}.auth-box>*:nth-child(12){animation-delay:720ms}.auth-box>*:nth-child(13){animation-delay:780ms}
+@keyframes authIn{from{opacity:0;transform:translateY(26px) scale(.98)}to{opacity:1;transform:none}}
+.auth-box>h1{background:linear-gradient(90deg,var(--text) 0%,#4aa8ff 30%,#a855f7 55%,#ff9a3c 78%,var(--text) 100%);background-size:260% 100%;background-clip:text;-webkit-background-clip:text;color:transparent;animation:authIn .7s cubic-bezier(.2,.8,.2,1) both,shine 7s linear infinite}
+@keyframes shine{to{background-position:-260% 0}}
+.logo-stage{position:relative;width:96px;margin:0 auto 8px}
+.logo-stage .logo-img{margin:0 auto;position:relative}
+.ring{position:absolute;inset:0;border-radius:30%;border:2px solid #4aa8ff;opacity:0;animation:ring 3.2s ease-out infinite}
+.ring.r2{animation-delay:1.6s;border-color:#a855f7}
+@keyframes ring{0%{transform:scale(1);opacity:.7}100%{transform:scale(2.3);opacity:0}}
+.auth-box>.logo-img,.logo-stage .logo-img{animation:authIn .7s cubic-bezier(.2,.8,.2,1) both,bob 3.6s ease-in-out .7s infinite,halo 3.6s ease-in-out .7s infinite}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
+@keyframes halo{0%,100%{filter:drop-shadow(0 0 8px #3d7bff55)}50%{filter:drop-shadow(0 0 24px #7a5cff99)}}
+.auth input,.auth textarea{background:#ffffff10;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);transition:border-color .25s,box-shadow .25s,background .25s}
+.light .auth input,.light .auth textarea{background:#ffffffcc}
+.auth input:focus,.auth textarea:focus{outline:0;border-color:#4aa8ff;box-shadow:0 0 0 3px #4aa8ff33}
+.gbtn,.auth .primary.wide{transition:transform .25s,box-shadow .25s}
+.gbtn:hover,.auth .primary.wide:hover{transform:translateY(-2px);box-shadow:0 10px 30px #4b6dff66}
+.gbtn:active,.auth .primary.wide:active{transform:scale(.98)}
+.auth .primary.wide{position:relative;overflow:hidden}
+.auth .primary.wide::after{content:"";position:absolute;top:0;left:-70%;width:40%;height:100%;background:linear-gradient(100deg,transparent,#ffffff59,transparent);transform:skewX(-20deg);animation:sheen 3.4s ease-in-out infinite}
+@keyframes sheen{0%{left:-70%}55%,100%{left:140%}}
+.chips button{transition:transform .2s,background .2s,border-color .2s}
+.chips button:hover{border-color:#4aa8ff}.chips button.on{transform:scale(1.05)}
+.shake{animation:shake .42s}
+@keyframes shake{20%{transform:translateX(-8px)}40%{transform:translateX(7px)}60%{transform:translateX(-5px)}80%{transform:translateX(3px)}}
+.qpage{animation:authIn .5s cubic-bezier(.2,.8,.2,1) both}.qpage[hidden]{display:none}
+.qpage textarea{margin-bottom:6px}
+.stp{transition:.3s}.stp i{transition:background .4s,width .4s}.stp i.on{width:34px}
+@media(prefers-reduced-motion:reduce){.auth *,.auth *::after{animation:none!important}}
 </style>
 </head>
 <body>
@@ -328,8 +371,9 @@ h1,h2,.brand,.welcome h1{font-family:var(--serif);font-weight:500}.assistant .bu
   </section>
 
   <section class="auth" id="auth" aria-label="Sign in">
+    <div class="auth-bg" aria-hidden="true"><i class="blob b1"></i><i class="blob b2"></i><i class="blob b3"></i><canvas id="authCanvas"></canvas></div>
     <div class="auth-box" id="authBox">
-      <img class="logo-img" id="authLogo" alt="TESA Si">
+      <div class="logo-stage"><span class="ring"></span><span class="ring r2"></span><img class="logo-img" id="authLogo" alt="TESA Si"></div>
       <h1 id="authTitle">The Si for problem solvers</h1>
       <p class="auth-sub" id="authSub">Sign in to continue with TESA Si.</p>
       <button class="gbtn" id="googleBtn" type="button"><svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.500c3.500 0 6.600 1.200 9.100 3.600l6.800-6.800C35.800 2.400 30.300 0 24 0 14.600 0 6.500 5.400 2.600 13.200l7.900 6.100C12.400 13.600 17.700 9.500 24 9.500z"/><path fill="#4285F4" d="M46.500 24.500c0-1.600-.1-3.100-.4-4.500H24v9h12.700c-.6 3-2.200 5.500-4.700 7.200l7.600 5.900c4.400-4.100 6.900-10.200 6.900-17.600z"/><path fill="#FBBC05" d="M10.500 28.700a14.500 14.500 0 0 1 0-9.400l-7.900-6.100a24 24 0 0 0 0 21.600l7.900-6.100z"/><path fill="#34A853" d="M24 48c6.500 0 11.900-2.100 15.900-5.800l-7.600-5.900c-2.100 1.400-4.900 2.300-8.300 2.300-6.300 0-11.600-4.100-13.500-9.800l-7.900 6.100C6.500 42.600 14.600 48 24 48z"/></svg>Continue with Google</button>
@@ -348,20 +392,17 @@ h1,h2,.brand,.welcome h1{font-family:var(--serif);font-weight:500}.assistant .bu
     </div>
     <div class="auth-box" id="quiz" hidden>
       <img class="logo-img" id="quizLogo" alt="TESA Si">
+      <div class="stp" id="qStp"></div>
       <h1>Let's set up TESA Si</h1>
-      <p class="auth-sub">A few quick questions so Si can help you better.</p>
-      <label class="field"><span>What should TESA Si call you?</span><input id="qName" type="text"></label>
-      <div class="qlabel">What will you use it for? (pick any)</div><div class="chips" id="qUse"></div>
-      <div class="qlabel">How should replies feel?</div><div class="chips" id="qStyle"></div>
-      <div class="qlabel">Anything else TESA Si should know? (optional)</div>
-      <textarea id="qNote" rows="3" placeholder="For example: I'm a student, explain things simply."></textarea>
-      <div class="stp"><i class="on"></i><i></i></div>
-      <button class="primary wide" id="qDone" type="button">Next: connect AI engines</button>
+      <p class="auth-sub" id="qSub">A few quick questions so Si can help you better.</p>
+      <div id="qPages"></div>
+      <button class="primary wide" id="qDone" type="button">Next</button>
+      <button class="link" id="qBack" type="button" hidden>Back</button>
       <button class="link" id="qSkip" type="button">Skip for now</button>
     </div>
     <div class="auth-box" id="quiz2" hidden>
       <img class="logo-img" id="quiz2Logo" alt="TESA Si">
-      <div class="stp"><i class="on"></i><i class="on"></i></div>
+      <div class="stp"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div>
       <h1>Connect your AI engines</h1>
       <p class="auth-sub">Add Google search and the AIs you use: Claude, ChatGPT, Gemini and more. You can change this later in AI Engines.</p>
       <div id="qEng"></div>
@@ -993,7 +1034,7 @@ h1,h2,.brand,.welcome h1{font-family:var(--serif);font-weight:500}.assistant .bu
     try { localStorage.setItem(USERS_KEY, JSON.stringify(users)); } catch { return err("Storage is full."); }
     state.session = email; state.settings.accountEmail = email; state.settings.displayName = name;
     saveState(); updateSettingsLabels();
-    $("authBox").hidden = true; $("quiz").hidden = false; $("qName").value = name;
+    $("authBox").hidden = true; $("quiz").hidden = false; qGo(0); $("qName").value = name;
   };
   function chipSet(host, list, multi, def) {
     host.innerHTML = list.map(x => '<button type="button"' + (x === def ? ' class="on"' : "") + '>' + x + '</button>').join("");
@@ -1003,12 +1044,52 @@ h1,h2,.brand,.welcome h1{font-family:var(--serif);font-weight:500}.assistant .bu
       b.classList.toggle("on", multi ? undefined : true);
     };
   }
-  chipSet($("qUse"), ["Learning","Writing","Coding","Ideas","Work","Fun"], true);
-  chipSet($("qStyle"), ["Balanced","Friendly","Professional","Concise","Detailed"], false, "Balanced");
+  /* ===== Setup questions (edit this list to add more) ===== */
+  const QUIZ = [
+    { sub: "First, tell us about you.", items: [
+      { id: "qName", t: "input", q: "What should TESA Si call you?" },
+      { id: "qUse", t: "multi", q: "What will you use it for? (pick any)", o: ["Learning","Writing","Coding","Ideas","Work","Fun"] }
+    ] },
+    { sub: "Now, how you like to work.", items: [
+      { id: "qStyle", t: "single", q: "How should replies feel?", o: ["Balanced","Friendly","Professional","Concise","Detailed"], def: "Balanced" },
+      { id: "qRole", t: "single", q: "What best describes you?", o: ["Student","Professional","Developer","Creator","Other"] },
+      { id: "qLevel", t: "single", q: "How familiar are you with AI?", o: ["Just starting","Comfortable","Expert"] }
+    ] },
+    { sub: "Last details, almost done.", items: [
+      { id: "qTopics", t: "multi", q: "Which topics do you enjoy? (pick any)", o: ["Science","Technology","Business","Art & design","Health","Sports","Music","Gaming"] },
+      { id: "qLang", t: "single", q: "Preferred language for replies", o: ["English","العربية","Español","Français","Other"], def: "English" },
+      { id: "qNote", t: "text", q: "Anything else TESA Si should know? (optional)", ph: "For example: I'm a student, explain things simply." }
+    ] }
+  ];
+  let qi = 0;
+  $("qPages").innerHTML = QUIZ.map((pg, i) => '<div class="qpage" data-p="' + i + '" hidden>' + pg.items.map(it =>
+    it.t === "input" ? '<label class="field"><span>' + it.q + '</span><input id="' + it.id + '" type="text"></label>' :
+    it.t === "text" ? '<div class="qlabel">' + it.q + '</div><textarea id="' + it.id + '" rows="3" placeholder="' + (it.ph || "") + '"></textarea>' :
+    '<div class="qlabel">' + it.q + '</div><div class="chips" id="' + it.id + '"></div>').join("") + '</div>').join("");
+  QUIZ.forEach(pg => pg.items.forEach(it => { if (it.o) chipSet($(it.id), it.o, it.t === "multi", it.def); }));
+  function qGo(i) {
+    qi = i;
+    document.querySelectorAll("#qPages .qpage").forEach(el => el.hidden = +el.dataset.p !== i);
+    $("qStp").innerHTML = Array.from({ length: QUIZ.length + 1 }, (_, k) => '<i' + (k <= i ? ' class="on"' : "") + '></i>').join("");
+    $("qSub").textContent = QUIZ[i].sub; $("qBack").hidden = i === 0;
+    $("qDone").textContent = i < QUIZ.length - 1 ? "Next" : "Next: connect AI engines";
+    $("auth").scrollTop = 0;
+  }
+  qGo(0);
+  $("qBack").onclick = () => qGo(Math.max(0, qi - 1));
   $("qDone").onclick = () => {
-    const on = h => [...$(h).querySelectorAll(".on")].map(b => b.textContent), c = state.settings, use = on("qUse");
-    c.displayName = $("qName").value.trim() || c.displayName; c.responseStyle = on("qStyle")[0] || "Balanced";
-    c.customInstructions = [use.length ? "The user mainly uses TESA Si for: " + use.join(", ") + "." : "", $("qNote").value.trim()].filter(Boolean).join(" ");
+    if (qi < QUIZ.length - 1) return qGo(qi + 1);
+    const on = h => [...$(h).querySelectorAll(".on")].map(b => b.textContent), c = state.settings;
+    const a = { use: on("qUse"), style: on("qStyle")[0] || "Balanced", role: on("qRole")[0] || "", level: on("qLevel")[0] || "", topics: on("qTopics"), lang: on("qLang")[0] || "English", note: $("qNote").value.trim() };
+    c.displayName = $("qName").value.trim() || c.displayName; c.responseStyle = a.style; c.profile = a;
+    c.customInstructions = [
+      a.use.length ? "The user mainly uses TESA Si for: " + a.use.join(", ") + "." : "",
+      a.role ? "The user describes themselves as: " + a.role + "." : "",
+      a.level ? "Experience with AI: " + a.level + "." : "",
+      a.topics.length ? "Interests: " + a.topics.join(", ") + "." : "",
+      a.lang !== "English" && a.lang !== "Other" ? "Reply in " + a.lang + " unless asked otherwise." : "",
+      a.note
+    ].filter(Boolean).join(" ");
     saveState(); $("quiz").hidden = true; $("quiz2").hidden = false; drawEng($("qEng")); $("auth").scrollTop = 0;
   };
   $("qSkip").onclick = () => { $("quiz").hidden = true; $("quiz2").hidden = false; drawEng($("qEng")); };
@@ -1427,6 +1508,47 @@ h1,h2,.brand,.welcome h1{font-family:var(--serif);font-weight:500}.assistant .bu
     const em = $("aEmail").value.trim().toLowerCase(); if (!/^\S+@\S+\.\S+$/.test(em)) { $("authErr").textContent = "Enter a valid email."; return; }
     const has = !!getUsers()[em]; setMode(has ? "in" : "up"); stage = "pw"; $("aPass").hidden = false; $("aPass").focus(); $("authGo").textContent = has ? "Sign in" : "Create account";
   }, true);
+
+  /* login animation: drifting constellation that reacts to touch/mouse */
+  (() => {
+    const au = $("auth"), cv = $("authCanvas"), ctx = cv.getContext("2d"), reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let W = 0, H = 0, pts = [], raf = 0, ptr = { x: -999, y: -999 };
+    function size() {
+      const dpr = Math.min(devicePixelRatio || 1, 2); W = innerWidth; H = innerHeight;
+      cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      pts = Array.from({ length: Math.round(Math.min(75, Math.max(28, W * H / 15000))) }, () => ({ x: Math.random() * W, y: Math.random() * H, vx: (Math.random() - .5) * .4, vy: (Math.random() - .5) * .4, r: 1 + Math.random() * 1.7, ph: Math.random() * 6.28 }));
+    }
+    function draw(t) {
+      const rgb = document.body.classList.contains("light") ? "54,90,255" : "120,205,255", D = Math.min(135, W / 3);
+      ctx.clearRect(0, 0, W, H);
+      for (const p of pts) {
+        p.x += p.vx; p.y += p.vy;
+        if (p.x < 0 || p.x > W) p.vx *= -1; if (p.y < 0 || p.y > H) p.vy *= -1;
+        const dx = p.x - ptr.x, dy = p.y - ptr.y, d = Math.hypot(dx, dy);
+        if (d > 0 && d < 150) { p.x += dx / d * (150 - d) * .03; p.y += dy / d * (150 - d) * .03; }
+      }
+      ctx.lineWidth = 1;
+      for (let i = 0; i < pts.length; i++) {
+        for (let j = i + 1; j < pts.length; j++) {
+          const d = Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y);
+          if (d < D) { ctx.strokeStyle = "rgba(" + rgb + "," + ((1 - d / D) * .35).toFixed(3) + ")"; ctx.beginPath(); ctx.moveTo(pts[i].x, pts[i].y); ctx.lineTo(pts[j].x, pts[j].y); ctx.stroke(); }
+        }
+        const d = Math.hypot(pts[i].x - ptr.x, pts[i].y - ptr.y);
+        if (d < 170) { ctx.strokeStyle = "rgba(255,170,90," + ((1 - d / 170) * .6).toFixed(3) + ")"; ctx.beginPath(); ctx.moveTo(pts[i].x, pts[i].y); ctx.lineTo(ptr.x, ptr.y); ctx.stroke(); }
+      }
+      for (const p of pts) { ctx.fillStyle = "rgba(" + rgb + "," + (.45 + .45 * Math.sin(t * .002 + p.ph)).toFixed(2) + ")"; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.283); ctx.fill(); }
+    }
+    const loop = t => { draw(t); raf = requestAnimationFrame(loop); };
+    const run = () => { cancelAnimationFrame(raf); if (reduce) { draw(0); return; } if (au.classList.contains("show") && !document.hidden) raf = requestAnimationFrame(loop); };
+    size(); run();
+    addEventListener("resize", () => { size(); run(); });
+    document.addEventListener("visibilitychange", run);
+    new MutationObserver(run).observe(au, { attributes: true, attributeFilter: ["class"] });
+    au.addEventListener("pointermove", e => { ptr.x = e.clientX; ptr.y = e.clientY; });
+    au.addEventListener("pointerleave", () => { ptr.x = ptr.y = -999; });
+    au.addEventListener("pointerup", () => { setTimeout(() => { ptr.x = ptr.y = -999; }, 400); });
+    new MutationObserver(() => { if ($("authErr").textContent) { const f = $("authForm"); f.classList.remove("shake"); void f.offsetWidth; f.classList.add("shake"); } }).observe($("authErr"), { childList: true, characterData: true, subtree: true });
+  })();
   applyFont();
 
   applyTheme(state.theme);
