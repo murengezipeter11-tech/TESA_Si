@@ -759,7 +759,7 @@ h1,h2,.brand,.welcome h1{font-family:var(--serif);font-weight:500}.assistant .bu
 
   function openSettingDetail(name) {
     const orig = name; name = ({ Profile: "Personalization", Billing: "Upgrade plan", Capabilities: "Plugins", Connectors: "Si connection", Privacy: "Privacy center" })[name] || name;
-    if (orig === "Connectors") { closeSettingsScreen(); go("engines"); return; }
+    if (orig === "Connectors") { closeSettingsScreen(); go("connection"); return; }
     if (name === "Log out") { askLogout(); return; }
     if (name === "Haptic feedback") { state.settings.haptic = state.settings.haptic === false; saveState(); updateSettingsLabels(); vib(30); return; }
     currentSetting = name;
@@ -804,8 +804,8 @@ h1,h2,.brand,.welcome h1{font-family:var(--serif);font-weight:500}.assistant .bu
     } else if (name === "General") {
       body = selectField("Theme", "theme", state.theme, ["dark","light"]);
     } else if (name === "Si connection") {
-      body = fieldText("Chat API endpoint", "endpoint", state.endpoint || "/api/chat", "/api/chat") +
-        `<p>Use a backend endpoint that accepts a JSON messages array and returns <code>{"reply":"..."}</code>. Never place your provider API key in this page.</p>`;
+      body = fieldText("Claude AI API endpoint", "endpoint", state.endpoint || "/api/chat", "/api/chat") +
+        `<p><strong>TESASI Claude connection</strong><br>Use <code>/api/chat</code> for the Vercel backend included with this project. The backend calls Claude Sonnet 5.5. Keep <code>ANTHROPIC_API_KEY</code> in Vercel Environment Variables; never put it in this HTML file.</p>`;
     } else if (name === "Images") {
       body = state.images.length ? `<div class="pgrid">${state.images.map(i => `<img src="${i.src}" alt="${escapeAttr(i.name)}">`).join("")}</div>` : "<p>No images yet. Attach one with + → Photos or Camera.</p>";
     } else if (name === "Library") {
@@ -1178,21 +1178,33 @@ h1,h2,.brand,.welcome h1{font-family:var(--serif);font-weight:500}.assistant .bu
   }
   function pgConnection() {
     const on = !!state.endpoint;
-    $("pageBody").innerHTML = '<div class="card"><div class="ttl">' + (on ? "Server mode" : "Local mode") + '</div><small>' + (on ? "Chat tries " + esc(state.endpoint) + " first and falls back to local replies if it fails." : "No server set. Chat uses built-in local replies.") + '</small>' +
-      '<label class="lbl" style="margin-top:14px">Chat API endpoint</label><input id="connUrl" type="text" value="' + esc(state.endpoint) + '" placeholder="https://your-server/api/chat">' +
+    $("pageBody").innerHTML = '<div class="card"><div class="ttl">' + (on ? "Claude server mode" : "Local / other engine mode") + '</div><small>' + (on ? "Messages are sent to " + esc(state.endpoint) + " and answered by Claude through your private Vercel backend." : "No server endpoint is set. The app will use local replies or another AI engine you have configured.") + '</small>' +
+      '<label class="lbl" style="margin-top:14px">Claude AI API endpoint</label><input id="connUrl" type="text" value="' + esc(state.endpoint) + '" placeholder="/api/chat">' +
       '<div class="row acts"><button class="primary mini" data-act="csave">Save</button><button class="secondary mini" data-act="ctest">Test</button><button class="secondary mini" data-act="clocal">Use local mode</button></div>' +
-      (connMsg ? '<div class="status">' + esc(connMsg) + '</div>' : "") + '</div><p class="muted" style="font-size:12px;padding:0 4px;line-height:1.5">Your server should accept <code>{messages:[…]}</code> and return <code>{"reply":"…"}</code>. Never put provider API keys in this page.</p>';
+      (connMsg ? '<div class="status">' + esc(connMsg) + '</div>' : "") + '</div><p class="muted" style="font-size:12px;padding:0 4px;line-height:1.5">The Vercel backend accepts <code>{messages:[…]}</code> and returns <code>{"reply":"…"}</code>. Set <code>ANTHROPIC_API_KEY</code> in Vercel, not in this page.</p>';
   }
   async function testConn() {
     const url = ($("connUrl").value || "").trim(); state.endpoint = url; saveState();
     if (!url) { connMsg = "No endpoint set — using local mode."; return drawPage("connection"); }
-    connMsg = "Testing…"; drawPage("connection");
+    connMsg = "Testing Claude connection…"; drawPage("connection");
+    const ctl = new AbortController();
+    const timeout = setTimeout(() => ctl.abort(), 30000);
     try {
-      const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 8000);
-      const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: [{ role: "user", content: "ping" }] }), signal: ctl.signal }); clearTimeout(to);
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: [{ role: "user", content: "Reply with the word CONNECTED." }] }),
+        signal: ctl.signal
+      });
       const d = await r.json().catch(() => ({}));
-      connMsg = r.ok && (d.reply || d.output_text || d.message) ? "✓ Connected — the server replied." : "✗ Server answered with status " + r.status + (d.error ? ": " + d.error : ".");
-    } catch (e) { connMsg = "✗ Couldn't reach it (" + (e.name === "AbortError" ? "timed out" : e.message) + "). Chat will use local mode."; }
+      connMsg = r.ok && (d.reply || d.output_text || d.message)
+        ? "✓ Claude is connected. The backend returned a reply."
+        : "✗ Server answered with status " + r.status + (d.error ? ": " + d.error : ".");
+    } catch (e) {
+      connMsg = "✗ Couldn't reach the server (" + (e.name === "AbortError" ? "timed out" : e.message) + "). Check the Vercel deployment and /api/chat file.";
+    } finally {
+      clearTimeout(timeout);
+    }
     if (view === "connection") drawPage("connection");
   }
 
@@ -1333,18 +1345,43 @@ h1,h2,.brand,.welcome h1{font-family:var(--serif);font-weight:500}.assistant .bu
     return null;
   }
 
-  /* answers: engines first, then server, then local */
+  /* Answers: use the private Claude/Vercel backend first; other engines are optional only when server mode is disabled. */
   async function getAnswer(payload) {
-    const ea = await engineAnswer(payload).catch(e => (console.warn(e), null)); if (ea) return { text: ea.text, local: false, via: ea.via };
     if (state.endpoint) {
+      const ctl = new AbortController();
+      const timeout = setTimeout(() => ctl.abort(), 45000);
+      const st = state.settings;
       try {
-        const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 25000), st = state.settings;
-        const r = await fetch(state.endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, signal: ctl.signal,
-          body: JSON.stringify({ messages: payload, instructions: st.memoryEnabled ? st.customInstructions : "", style: st.responseStyle, think: !!state.think, plugins: st.plugins, project: (state.projects.find(p => p.id === state.project) || {}).name || "" }) });
-        clearTimeout(to); const d = await r.json().catch(() => ({})); const a = d.reply || d.output_text || d.message;
-        if (r.ok && typeof a === "string" && a.trim()) return { text: a, local: false };
-      } catch (e) { console.warn("Server unreachable, using local mode", e); }
+        const r = await fetch(state.endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: ctl.signal,
+          body: JSON.stringify({
+            messages: payload.slice(-20),
+            instructions: st.memoryEnabled ? st.customInstructions : "",
+            style: st.responseStyle,
+            think: !!state.think,
+            plugins: st.plugins,
+            project: (state.projects.find(p => p.id === state.project) || {}).name || ""
+          })
+        });
+        const d = await r.json().catch(() => ({}));
+        const answer = d.reply || d.output_text || d.message;
+        if (!r.ok) throw new Error(d.error || "Claude server returned status " + r.status);
+        if (typeof answer !== "string" || !answer.trim()) {
+          throw new Error("The Claude server returned an empty answer.");
+        }
+        return { text: answer.trim(), local: false, via: d.model || "Claude Sonnet 5.5" };
+      } catch (e) {
+        const reason = e.name === "AbortError" ? "The Claude request timed out." : e.message;
+        throw new Error(reason + " Check the /api/chat backend and the ANTHROPIC_API_KEY setting in Vercel.");
+      } finally {
+        clearTimeout(timeout);
+      }
     }
+
+    const ea = await engineAnswer(payload).catch(e => (console.warn(e), null));
+    if (ea) return { text: ea.text, local: false, via: ea.via };
     return { text: localReply(payload), local: true };
   }
   function addLocalNote(row) { const n = document.createElement("div"); n.className = "msg-meta"; n.innerHTML = 'Local mode — no Si server reached. <a href="#connection">Connect one</a>'; row.append(n); }
