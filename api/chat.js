@@ -1,8 +1,9 @@
-// TESA Si / TESASI — Claude AI backend for Vercel
-// Keep ANTHROPIC_API_KEY in Vercel Environment Variables. Never put it in index.html.
+// TESA Si / TESASI — Gemini AI backend for Vercel
+// Set GEMINI_API_KEY in Vercel Environment Variables.
+// Never put your Gemini API key in browser code or commit it to GitHub.
 
-const MODEL = "claude-sonnet-5-5";
-const API_VERSION = "2026-10-21";
+const MODEL = "gemini-3.8-flash";
+const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
 function json(res, status, body) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -16,10 +17,10 @@ export default async function handler(req, res) {
     return json(res, 405, { error: "Method not allowed. Use POST." });
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return json(res, 500, {
-      error: "Claude API is not configured. Add ANTHROPIC_API_KEY in Vercel Environment Variables and redeploy."
+      error: "Gemini API is not configured. Add GEMINI_API_KEY in Vercel Environment Variables and redeploy."
     });
   }
 
@@ -45,7 +46,16 @@ export default async function handler(req, res) {
       }
 
       totalCharacters += content.length;
-      messages.push({ role: item.role, content });
+      const role = item.role === "assistant" ? "model" : "user";
+
+      // Gemini expects conversation turns to alternate. Merge adjacent messages
+      // with the same role so valid histories are still accepted.
+      const previous = messages[messages.length - 1];
+      if (previous && previous.role === role) {
+        previous.parts[0].text += "\n\n" + content;
+      } else {
+        messages.push({ role, parts: [{ text: content }] });
+      }
     }
 
     if (totalCharacters > 70000) {
@@ -76,31 +86,22 @@ export default async function handler(req, res) {
       instructions ? "User's optional response preferences: " + instructions : ""
     ].filter(Boolean).join("\n\n");
 
-    const headers = {
-      "Authorization": `Bearer ${apiKey}`,
-      "anthropic-version": API_VERSION,
-      "content-type": "application/json"
-    };
-
-    // Optional: set this when your Anthropic API key requires a workspace selection.
-    if (process.env.ANTHROPIC_WORKSPACE_ID) {
-      headers["anthropic-workspace-id"] = process.env.ANTHROPIC_WORKSPACE_ID;
-    }
-
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 40000);
 
     let upstream;
     try {
-      upstream = await fetch("https://api.anthropic.com/v1/messages", {
+      upstream = await fetch(API_URL, {
         method: "POST",
-        headers,
+        headers: {
+          "x-goog-api-key": apiKey,
+          "content-type": "application/json"
+        },
         signal: controller.signal,
         body: JSON.stringify({
-          model: MODEL,
-          max_tokens: 1800,
-          system,
-          messages
+          systemInstruction: { parts: [{ text: system }] },
+          contents: messages,
+          generationConfig: { maxOutputTokens: 1800 }
         })
       });
     } finally {
@@ -110,38 +111,44 @@ export default async function handler(req, res) {
     const data = await upstream.json().catch(() => ({}));
 
     if (!upstream.ok) {
-      // Log only the provider error details and status, never the API key or user conversation.
-      
-console.error("Anthropic API error:", {
-  status: upstream.status,
-  type: data.error?.type || "unknown_error",
-  message: data.error?.message || "No provider message",
-  requestId: upstream.headers.get("request-id") || "not-provided"
-});
+      const providerMessage = data.error?.message || "No provider message";
+      console.error("Gemini API error:", {
+        status: upstream.status,
+        message: providerMessage.slice(0, 500)
+      });
 
-      const message = upstream.status === 401
-        ? "Claude rejected the API key. Check ANTHROPIC_API_KEY in Vercel."
-        : upstream.status === 429
-          ? "Claude is receiving too many requests. Please try again shortly."
-          : "Claude could not complete this request (HTTP " + upstream.status + "). Check your API setup and available usage.";
+      const message = upstream.status === 400
+        ? "Gemini could not accept this request. Check the conversation format and model settings."
+        : upstream.status === 401 || upstream.status === 403
+          ? "Gemini rejected the API key or the key lacks permission. Check GEMINI_API_KEY in Vercel."
+          : upstream.status === 404
+            ? "The Gemini model was not found or is unavailable for this API key. Check the model name and API access."
+            : upstream.status === 429
+              ? "Gemini is receiving too many requests or the API quota has been reached. Please try again later."
+              : "Gemini could not complete this request (HTTP " + upstream.status + "). Check your API setup and available usage.";
       return json(res, 502, { error: message });
     }
 
-    const reply = (data.content || [])
-      .filter(block => block.type === "text" && typeof block.text === "string")
-      .map(block => block.text)
+    const reply = (data.candidates?.[0]?.content?.parts || [])
+      .filter(part => typeof part.text === "string")
+      .map(part => part.text)
       .join("\n")
       .trim();
 
     if (!reply) {
-      return json(res, 502, { error: "Claude returned no text. Please try again." });
+      const reason = data.promptFeedback?.blockReason;
+      return json(res, 502, {
+        error: reason
+          ? "Gemini could not answer because the request was blocked by its safety settings."
+          : "Gemini returned no text. Please try again."
+      });
     }
 
     return json(res, 200, { reply, model: MODEL });
   } catch (error) {
-    console.error("TESASI Claude backend error:", error.name || "Error");
+    console.error("TESASI Gemini backend error:", error.name || "Error");
     const message = error.name === "AbortError"
-      ? "Claude took too long to answer. Please try again."
+      ? "Gemini took too long to answer. Please try again."
       : "The TESASI AI server encountered a problem. Please try again.";
     return json(res, 500, { error: message });
   }
