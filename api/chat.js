@@ -1,14 +1,53 @@
-// TESA Si / TESASI — Gemini AI backend for Vercel
-// Set GEMINI_API_KEY in Vercel Environment Variables.
-// Never put your Gemini API key in browser code or commit it to GitHub.
 
-const MODEL = "gemini-3.8-flash";
-const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+// TESA Si / TESASI — Gemini AI backend for Vercel
+// Add GEMINI_API_KEY in Vercel Environment Variables.
+// Never put API keys in frontend JavaScript.
+
+const PRIMARY_MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash-lite";
+const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
 function json(res, status, body) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
   return res.status(status).json(body);
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function isTemporaryStatus(status) {
+  return [408, 429, 500, 502, 503, 504].includes(status);
+}
+
+async function callGemini({ apiKey, model, system, contents }) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 45000);
+
+  try {
+    const response = await fetch(
+      `${API_BASE}/${encodeURIComponent(model)}:generateContent`,
+      {
+        method: "POST",
+        headers: {
+          "x-goog-api-key": apiKey,
+          "content-type": "application/json"
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents,
+          generationConfig: { maxOutputTokens: 1800 }
+        })
+      }
+    );
+
+    const data = await response.json().catch(() => ({}));
+    return { response, data };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export default async function handler(req, res) {
@@ -46,16 +85,10 @@ export default async function handler(req, res) {
       }
 
       totalCharacters += content.length;
-      const role = item.role === "assistant" ? "model" : "user";
-
-      // Gemini expects conversation turns to alternate. Merge adjacent messages
-      // with the same role so valid histories are still accepted.
-      const previous = messages[messages.length - 1];
-      if (previous && previous.role === role) {
-        previous.parts[0].text += "\n\n" + content;
-      } else {
-        messages.push({ role, parts: [{ text: content }] });
-      }
+      messages.push({
+        role: item.role === "assistant" ? "model" : "user",
+        parts: [{ text: content }]
+      });
     }
 
     if (totalCharacters > 70000) {
@@ -86,46 +119,41 @@ export default async function handler(req, res) {
       instructions ? "User's optional response preferences: " + instructions : ""
     ].filter(Boolean).join("\n\n");
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 40000);
+    let result;
+    let usedModel = PRIMARY_MODEL;
 
-    let upstream;
-    try {
-      upstream = await fetch(API_URL, {
-        method: "POST",
-        headers: {
-          "x-goog-api-key": apiKey,
-          "content-type": "application/json"
-        },
-        signal: controller.signal,
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: system }] },
-          contents: messages,
-          generationConfig: { maxOutputTokens: 1800 }
-        })
-      });
-    } finally {
-      clearTimeout(timeout);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      result = await callGemini({ apiKey, model: PRIMARY_MODEL, system, contents: messages });
+      if (result.response.ok || !isTemporaryStatus(result.response.status)) break;
+      if (attempt === 0) await sleep(900);
     }
 
-    const data = await upstream.json().catch(() => ({}));
+    if (!result.response.ok &&
+        [500, 502, 503, 504].includes(result.response.status) &&
+        FALLBACK_MODEL && FALLBACK_MODEL !== PRIMARY_MODEL) {
+      usedModel = FALLBACK_MODEL;
+      result = await callGemini({ apiKey, model: FALLBACK_MODEL, system, contents: messages });
+    }
+
+    const { response: upstream, data } = result;
 
     if (!upstream.ok) {
-      const providerMessage = data.error?.message || "No provider message";
       console.error("Gemini API error:", {
         status: upstream.status,
-        message: providerMessage.slice(0, 500)
+        statusText: data.error?.status || "unknown_error",
+        message: data.error?.message || "No provider message"
       });
 
-      const message = upstream.status === 400
-        ? "Gemini could not accept this request. Check the conversation format and model settings."
-        : upstream.status === 401 || upstream.status === 403
-          ? "Gemini rejected the API key or the key lacks permission. Check GEMINI_API_KEY in Vercel."
-          : upstream.status === 404
-            ? "The Gemini model was not found or is unavailable for this API key. Check the model name and API access."
-            : upstream.status === 429
-              ? "Gemini is receiving too many requests or the API quota has been reached. Please try again later."
-              : "Gemini could not complete this request (HTTP " + upstream.status + "). Check your API setup and available usage.";
+      let message;
+      if (upstream.status === 401 || upstream.status === 403) {
+        message = "Gemini rejected the API key or access. Check GEMINI_API_KEY and the API access for this project.";
+      } else if (upstream.status === 429) {
+        message = "Gemini usage limit has been reached. Check the project's rate limits and usage, then try again later.";
+      } else if ([500, 502, 503, 504].includes(upstream.status)) {
+        message = "Gemini is temporarily busy. Both the main and backup models could not respond. Please try again shortly.";
+      } else {
+        message = "Gemini could not complete this request (HTTP " + upstream.status + "). Check the API setup and request.";
+      }
       return json(res, 502, { error: message });
     }
 
@@ -136,15 +164,10 @@ export default async function handler(req, res) {
       .trim();
 
     if (!reply) {
-      const reason = data.promptFeedback?.blockReason;
-      return json(res, 502, {
-        error: reason
-          ? "Gemini could not answer because the request was blocked by its safety settings."
-          : "Gemini returned no text. Please try again."
-      });
+      return json(res, 502, { error: "Gemini returned no text. Please try again." });
     }
 
-    return json(res, 200, { reply, model: MODEL });
+    return json(res, 200, { reply, model: usedModel });
   } catch (error) {
     console.error("TESASI Gemini backend error:", error.name || "Error");
     const message = error.name === "AbortError"
