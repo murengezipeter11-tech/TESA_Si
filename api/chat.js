@@ -111,7 +111,14 @@ export default async function handler(req, res) {
 
     if (!upstream.ok) {
       // Log only the provider error details and status, never the API key or user conversation.
-      console.error("Anthropic API error:", upstream.status, data.error?.type || "unknown_error");
+      
+console.error("Anthropic API error:", {
+  status: upstream.status,
+  type: data.error?.type || "unknown_error",
+  message: data.error?.message || "No provider message",
+  requestId: upstream.headers.get("request-id") || "not-provided"
+});
+
       const message = upstream.status === 401
         ? "Claude rejected the API key. Check ANTHROPIC_API_KEY in Vercel."
         : upstream.status === 429
