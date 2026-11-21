@@ -382,7 +382,7 @@ h1,h2,.brand,.welcome h1{font-family:var(--serif);font-weight:500}.assistant .bu
       <form id="authForm" novalidate>
         <input id="aName" type="text" placeholder="Your name" autocomplete="name" hidden>
         <input id="aEmail" type="email" placeholder="Enter your email" autocomplete="email">
-        <input id="aPass" type="password" placeholder="Password" autocomplete="current-password" hidden>
+        <input id="aPass" type="password" placeholder="Password" autocomplete="current-password">
         <input id="aPass2" type="password" placeholder="Confirm password" autocomplete="new-password" hidden>
         <div class="auth-err" id="authErr"></div>
         <button class="primary wide" id="authGo" type="submit">Continue</button>
@@ -423,10 +423,39 @@ h1,h2,.brand,.welcome h1{font-family:var(--serif);font-weight:500}.assistant .bu
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 (() => {
   "use strict";
   const $ = id => document.getElementById(id);
+  const SUPABASE_URL = "https://slkvnpyovmrgnvwfftrb.supabase.co";
+  const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_o30VoV_ZyXfJSZm9WGX5TA__KBIs3sK";
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+  let isAdmin = false;
+  let currentAuthUser = null;
+  async function verifyAdmin(session) {
+    if (!session?.access_token) return false;
+    try {
+      const response = await fetch("/api/admin/me", { method:"GET", headers:{Authorization:"Bearer "+session.access_token}, cache:"no-store" });
+      return response.ok;
+    } catch (error) { console.error("Admin verification unavailable:", error?.name || "Error"); return false; }
+  }
+  function setAdminSettingsVisibility(allowed) {
+    isAdmin = !!allowed;
+    const group = $("adminSettingsGroup");
+    if (group) group.hidden = !isAdmin;
+    if (group) filterSettings($("settingsSearch")?.value || "");
+  }
+  async function restoreSupabaseSession() {
+    const { data, error } = await supabase.auth.getSession();
+    if (error || !data.session) { setAdminSettingsVisibility(false); showAuth(); return; }
+    currentAuthUser = data.session.user;
+    state.session = currentAuthUser.email || currentAuthUser.id;
+    state.settings.accountEmail = currentAuthUser.email || "";
+    isAdmin = await verifyAdmin(data.session);
+    setAdminSettingsVisibility(isAdmin);
+    saveState(); updateSettingsLabels(); hideAuth();
+  }
   const STORAGE_KEY = "tesasi_state_v1";
   const defaults = { endpoint: "/api/chat", theme: "system", chats: [], activeId: null, session: null, images: [], files: [], projects: [], tasks: [], project: null };
   let state = loadState();
@@ -496,6 +525,7 @@ h1,h2,.brand,.welcome h1{font-family:var(--serif);font-weight:500}.assistant .bu
     document.querySelectorAll("[data-i]").forEach(e => e.insertAdjacentHTML("afterbegin", svg(e.dataset.i)));
     $("settingsScroll").innerHTML = '<div class="acct"><span id="acctEmail"></span><b class="plan">Free</b></div><div class="upg"><h3>Want more TESA Si?</h3><p>Upgrade for more usage and capabilities.</p><button class="wbtn" type="button" data-up>Upgrade</button></div>' + GROUPS.map(([t, rows]) => '<div class="settings-group">' + (t ? '<div class="settings-section-title">' + t + '</div>' : "") +
       '<div class="settings-card">' + rows.map(([n, i, v]) => '<button class="settings-row' + (n === "Log out" ? " logout-row" : "") + (n === "Upgrade plan" ? " upgrade-row" : "") + '" data-setting="' + n + '"><span class="setting-icon">' + svg(i) + '</span><span class="rt"><span>' + n + '</span>' + (v === 1 ? '<small class="row-value"></small>' : "") + '</span>' + (v === "tg" ? '<i class="tg" id="hapticSw"></i>' : "") + '</button>').join("") + '</div></div>').join("") +
+      '<div class="settings-group" id="adminSettingsGroup" hidden><div class="settings-section-title">Administration</div><div class="settings-card"><button class="settings-row" data-setting="Admin Dashboard"><span class="setting-icon">' + svg("shield") + '</span><span class="rt"><span>Admin Dashboard</span><small class="row-value">Private owner access</small></span></button></div></div>' +
       '<div class="settings-empty" id="settingsNoResults" style="display:none">No settings found</div><div class="settings-bottom-space"></div>';
     $("attachMenu").innerHTML = [["Camera","camera"],["Photos","images"],["Files","clip"],["Plugins","plugins"],["Think harder","think"]].map(([n, i]) => '<button data-a="' + n + '"><i>' + svg(i) + '</i>' + n + '</button>').join("");
     syncThink(); syncSend();
@@ -868,7 +898,15 @@ h1,h2,.brand,.welcome h1{font-family:var(--serif);font-weight:500}.assistant .bu
   }
 
   document.querySelectorAll(".settings-row").forEach(row => {
-    row.addEventListener("click", () => openSettingDetail(row.dataset.setting));
+    row.addEventListener("click", () => {
+      if (row.dataset.setting === "Admin Dashboard") {
+        if (!isAdmin) return toast("Admin access denied.");
+        $("settingsTitle").textContent = "Admin Dashboard";
+        $("settingDetail").innerHTML = '<div class="card"><div class="ttl">TESA Si Administration</div><p class="muted">Your admin identity has been verified by the server.</p><p class="muted">Dashboard modules are the next build step.</p></div>';
+        modal.classList.add("show"); return;
+      }
+      openSettingDetail(row.dataset.setting);
+    });
   });
 
   $("closeSettings").onclick = () => modal.classList.remove("show");
@@ -1016,25 +1054,23 @@ h1,h2,.brand,.welcome h1{font-family:var(--serif);font-weight:500}.assistant .bu
   $("tabIn").onclick = () => setMode("in"); $("tabUp").onclick = () => setMode("up");
   $("guestBtn").onclick = () => { state.session = "guest"; saveState(); hideAuth(); };
   $("authForm").onsubmit = async e => {
-    e.preventDefault(); const err = m => { $("authErr").textContent = m; };
-    const email = $("aEmail").value.trim().toLowerCase(), pw = $("aPass").value, users = getUsers();
-    if (!/^\S+@\S+\.\S+$/.test(email)) return err("Enter a valid email.");
-    if (authMode === "in") {
-      const u = users[email];
-      if (!u || u.hash !== await hashPw(pw, u.salt)) return err("Wrong email or password.");
-      state.session = email; state.settings.accountEmail = email; if (u.name) state.settings.displayName = u.name;
-      saveState(); updateSettingsLabels(); hideAuth(); return;
-    }
-    const name = $("aName").value.trim();
-    if (!name) return err("Enter your name.");
-    if (pw.length < 8) return err("Password must be at least 8 characters.");
-    if (pw !== $("aPass2").value) return err("Passwords do not match.");
-    if (users[email]) return err("That email already has an account. Sign in instead.");
-    const salt = id(); users[email] = { name, salt, hash: await hashPw(pw, salt) };
-    try { localStorage.setItem(USERS_KEY, JSON.stringify(users)); } catch { return err("Storage is full."); }
-    state.session = email; state.settings.accountEmail = email; state.settings.displayName = name;
-    saveState(); updateSettingsLabels();
-    $("authBox").hidden = true; $("quiz").hidden = false; qGo(0); $("qName").value = name;
+    e.preventDefault();
+    const err = message => { $("authErr").textContent = message; };
+    const email = $("aEmail").value.trim().toLowerCase(), password = $("aPass").value;
+    if (!/^\\S+@\\S+\\.\\S+$/.test(email)) return err("Enter a valid email.");
+    if (!password) return err("Enter your password.");
+    $("authGo").disabled = true; $("authGo").textContent = "Signing in…";
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) return err(error.message || "Sign in failed. Check your email and password.");
+      currentAuthUser = data.user;
+      state.session = data.user.email || data.user.id;
+      state.settings.accountEmail = data.user.email || "";
+      isAdmin = await verifyAdmin(data.session);
+      setAdminSettingsVisibility(isAdmin);
+      saveState(); updateSettingsLabels(); hideAuth();
+    } catch (error) { err("Could not connect to the sign-in service. Please try again."); }
+    finally { $("authGo").disabled = false; $("authGo").textContent = "Sign in"; }
   };
   function chipSet(host, list, multi, def) {
     host.innerHTML = list.map(x => '<button type="button"' + (x === def ? ' class="on"' : "") + '>' + x + '</button>').join("");
@@ -1435,7 +1471,9 @@ h1,h2,.brand,.welcome h1{font-family:var(--serif);font-weight:500}.assistant .bu
   }
   async function askLogout() {
     if (!await dlg({ title: "Log out", text: "Are you sure you want to log out?", ok: "Log out", danger: 1 })) return;
-    state.session = null; saveState(); go("chat"); showAuth();
+    await supabase.auth.signOut();
+    currentAuthUser = null; isAdmin = false; setAdminSettingsVisibility(false);
+    state.session = null; state.settings.accountEmail = ""; saveState(); go("chat"); showAuth();
   }
 
   let ctx = null;
@@ -1536,15 +1574,16 @@ h1,h2,.brand,.welcome h1{font-family:var(--serif);font-weight:500}.assistant .bu
     };
     appEl.append(b);
   };
-  let stage = "email";
-  function authReset() { stage = "email"; $("aPass").hidden = $("aName").hidden = $("aPass2").hidden = true; $("authGo").textContent = "Continue"; $("authTitle").textContent = "The Si for problem solvers"; }
-  const _showAuth = showAuth; showAuth = function () { _showAuth(); authReset(); };
-  $("aEmail").addEventListener("input", () => { if (stage === "pw") authReset(); });
-  $("authForm").addEventListener("submit", e => {
-    if (stage !== "email") return; e.preventDefault(); e.stopImmediatePropagation();
-    const em = $("aEmail").value.trim().toLowerCase(); if (!/^\S+@\S+\.\S+$/.test(em)) { $("authErr").textContent = "Enter a valid email."; return; }
-    const has = !!getUsers()[em]; setMode(has ? "in" : "up"); stage = "pw"; $("aPass").hidden = false; $("aPass").focus(); $("authGo").textContent = has ? "Sign in" : "Create account";
-  }, true);
+  const _showAuth = showAuth;
+  showAuth = function () {
+    _showAuth(); setMode("in");
+    $("aPass").hidden = false;
+    $("aName").hidden = $("aPass2").hidden = true;
+    $("authGo").textContent = "Sign in";
+  };
+  $("tabUp").hidden = true; $("tabIn").hidden = true;
+  $("guestBtn").hidden = true; $("googleBtn").hidden = true;
+  $("authSub").textContent = "Sign in with your TESA Si account.";
 
   /* login animation: drifting constellation that reacts to touch/mouse */
   (() => {
@@ -1593,177 +1632,12 @@ h1,h2,.brand,.welcome h1{font-family:var(--serif);font-weight:500}.assistant .bu
   if (state.activeId && !activeChat()) state.activeId = null;
   renderChat();
   renderHistory();
-  if (!state.session) showAuth();
+  showAuth();
   initRouter();
+  restoreSupabaseSession();
 })();
 </script>
-  
-<!-- TESA Si Admin Login - Phase 2 -->
-<style>
-#tesa-admin-launcher {
-  position: fixed;
-  right: 18px;
-  bottom: 18px;
-  z-index: 99998;
-  padding: 11px 18px;
-  border: 1px solid #64748b;
-  border-radius: 12px;
-  background: #101827;
-  color: white;
-  cursor: pointer;
-}
-#tesa-admin-panel {
-  display: none;
-  position: fixed;
-  inset: 0;
-  z-index: 99999;
-  background: rgba(3, 7, 18, .88);
-  backdrop-filter: blur(12px);
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-}
-#tesa-admin-card {
-  width: 100%;
-  max-width: 390px;
-  padding: 28px;
-  border: 1px solid #475569;
-  border-radius: 20px;
-  background: #111827;
-  color: white;
-  font-family: Arial, sans-serif;
-}
-#tesa-admin-card input {
-  box-sizing: border-box;
-  width: 100%;
-  margin: 9px 0;
-  padding: 13px;
-  border: 1px solid #475569;
-  border-radius: 9px;
-  background: #0f172a;
-  color: white;
-}
-#tesa-admin-card button {
-  padding: 12px;
-  border: 0;
-  border-radius: 9px;
-  cursor: pointer;
-}
-#tesa-admin-submit {
-  width: 100%;
-  margin-top: 12px;
-  background: #2563eb;
-  color: white;
-}
-#tesa-admin-status {
-  overflow-wrap: anywhere;
-  font-size: 13px;
-  margin-top: 14px;
-}
-</style>
-
-<button id="tesa-admin-launcher" type="button">Admin Login</button>
-
-<div id="tesa-admin-panel">
-  <div id="tesa-admin-card">
-    <h2>TESA Si Admin</h2>
-    <p>Secure administrator access</p>
-
-    <form id="tesa-admin-form">
-      <input id="tesa-admin-email" type="email"
-        placeholder="Admin email" required autocomplete="username">
-
-      <input id="tesa-admin-password" type="password"
-        placeholder="Password" required autocomplete="current-password">
-
-      <button id="tesa-admin-submit" type="submit">
-        Sign In
-      </button>
-    </form>
-
-    <div id="tesa-admin-status" role="status"></div>
-    <button id="tesa-admin-close" type="button"
-      style="margin-top:12px;background:#334155;color:white">
-      Close
-    </button>
-  </div>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>
-(() => {
-  const SUPABASE_URL =https://slkvnpyovmrgnvwfftrb.supabase.co ;
-  const SUPABASE_KEY = sb_publishable_o30VoV_ZyXfJSZm9WGX5TA__KBIs3sK;
-
-  const panel = document.getElementById("tesa-admin-panel");
-  const status = document.getElementById("tesa-admin-status");
-  const form = document.getElementById("tesa-admin-form");
-
-  document.getElementById("tesa-admin-launcher").onclick =
-    () => panel.style.display = "flex";
-
-  document.getElementById("tesa-admin-close").onclick =
-    () => panel.style.display = "none";
-
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const submit = document.getElementById("tesa-admin-submit");
-    submit.disabled = true;
-    status.textContent = "Checking admin credentials...";
-
-    try {
-      if (
-        SUPABASE_URL.includes("PASTE_") ||
-        SUPABASE_KEY.includes("PASTE_")
-      ) {
-        throw new Error("Supabase configuration is missing.");
-      }
-
-      if (!window.supabase?.createClient) {
-        throw new Error("Supabase library could not load.");
-      }
-
-      const client = window.supabase.createClient(
-        SUPABASE_URL,
-        SUPABASE_KEY
-      );
-
-      const { data, error } = await client.auth.signInWithPassword({
-        email: document.getElementById("tesa-admin-email").value.trim(),
-        password: document.getElementById("tesa-admin-password").value
-      });
-
-      if (error) throw error;
-
-      const response = await fetch("/api/admin/me", {
-        method: "GET",
-        headers: {
-          Authorization: "Bearer " + data.session.access_token
-        },
-        cache: "no-store"
-      });
-
-      const result = await response.json();
-
-      if (!response.ok || !result.ok) {
-        await client.auth.signOut();
-        throw new Error(result.error || "Admin verification failed.");
-      }
-
-      status.textContent =
-        "Admin verified: " + result.email +
-        ". Dashboard setup is the next step.";
-      form.reset();
-
-    } catch (error) {
-      status.textContent = error.message ||
-        "Login failed. Please try again.";
-    } finally {
-      submit.disabled = false;
-    }
-  });
-})();
-</script>
-<!-- End TESA Si Admin Login -->
 </body>
 </html>
+
+
