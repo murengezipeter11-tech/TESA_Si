@@ -1597,5 +1597,173 @@ h1,h2,.brand,.welcome h1{font-family:var(--serif);font-weight:500}.assistant .bu
   initRouter();
 })();
 </script>
+  
+<!-- TESA Si Admin Login - Phase 2 -->
+<style>
+#tesa-admin-launcher {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 99998;
+  padding: 11px 18px;
+  border: 1px solid #64748b;
+  border-radius: 12px;
+  background: #101827;
+  color: white;
+  cursor: pointer;
+}
+#tesa-admin-panel {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: rgba(3, 7, 18, .88);
+  backdrop-filter: blur(12px);
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+#tesa-admin-card {
+  width: 100%;
+  max-width: 390px;
+  padding: 28px;
+  border: 1px solid #475569;
+  border-radius: 20px;
+  background: #111827;
+  color: white;
+  font-family: Arial, sans-serif;
+}
+#tesa-admin-card input {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 9px 0;
+  padding: 13px;
+  border: 1px solid #475569;
+  border-radius: 9px;
+  background: #0f172a;
+  color: white;
+}
+#tesa-admin-card button {
+  padding: 12px;
+  border: 0;
+  border-radius: 9px;
+  cursor: pointer;
+}
+#tesa-admin-submit {
+  width: 100%;
+  margin-top: 12px;
+  background: #2563eb;
+  color: white;
+}
+#tesa-admin-status {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  margin-top: 14px;
+}
+</style>
+
+<button id="tesa-admin-launcher" type="button">Admin Login</button>
+
+<div id="tesa-admin-panel">
+  <div id="tesa-admin-card">
+    <h2>TESA Si Admin</h2>
+    <p>Secure administrator access</p>
+
+    <form id="tesa-admin-form">
+      <input id="tesa-admin-email" type="email"
+        placeholder="Admin email" required autocomplete="username">
+
+      <input id="tesa-admin-password" type="password"
+        placeholder="Password" required autocomplete="current-password">
+
+      <button id="tesa-admin-submit" type="submit">
+        Sign In
+      </button>
+    </form>
+
+    <div id="tesa-admin-status" role="status"></div>
+    <button id="tesa-admin-close" type="button"
+      style="margin-top:12px;background:#334155;color:white">
+      Close
+    </button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(() => {
+  const SUPABASE_URL = "PASTE_YOUR_SUPABASE_URL_HERE";
+  const SUPABASE_KEY = "PASTE_YOUR_PUBLISHABLE_KEY_HERE";
+
+  const panel = document.getElementById("tesa-admin-panel");
+  const status = document.getElementById("tesa-admin-status");
+  const form = document.getElementById("tesa-admin-form");
+
+  document.getElementById("tesa-admin-launcher").onclick =
+    () => panel.style.display = "flex";
+
+  document.getElementById("tesa-admin-close").onclick =
+    () => panel.style.display = "none";
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const submit = document.getElementById("tesa-admin-submit");
+    submit.disabled = true;
+    status.textContent = "Checking admin credentials...";
+
+    try {
+      if (
+        SUPABASE_URL.includes("PASTE_") ||
+        SUPABASE_KEY.includes("PASTE_")
+      ) {
+        throw new Error("Supabase configuration is missing.");
+      }
+
+      if (!window.supabase?.createClient) {
+        throw new Error("Supabase library could not load.");
+      }
+
+      const client = window.supabase.createClient(
+        SUPABASE_URL,
+        SUPABASE_KEY
+      );
+
+      const { data, error } = await client.auth.signInWithPassword({
+        email: document.getElementById("tesa-admin-email").value.trim(),
+        password: document.getElementById("tesa-admin-password").value
+      });
+
+      if (error) throw error;
+
+      const response = await fetch("/api/admin/me", {
+        method: "GET",
+        headers: {
+          Authorization: "Bearer " + data.session.access_token
+        },
+        cache: "no-store"
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.ok) {
+        await client.auth.signOut();
+        throw new Error(result.error || "Admin verification failed.");
+      }
+
+      status.textContent =
+        "Admin verified: " + result.email +
+        ". Dashboard setup is the next step.";
+      form.reset();
+
+    } catch (error) {
+      status.textContent = error.message ||
+        "Login failed. Please try again.";
+    } finally {
+      submit.disabled = false;
+    }
+  });
+})();
+</script>
+<!-- End TESA Si Admin Login -->
 </body>
 </html>
